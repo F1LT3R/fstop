@@ -133,6 +133,7 @@ async function main() {
 		
 		const layout = generateLayout(treeState, {
 			terminalSize: getTerminalSize(),
+			gitStatus,
 		})
 		renderer.render(layout, gitStatus)
 	}
