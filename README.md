@@ -1,17 +1,17 @@
 # 🔥 Watchers
 
-A mesmerizing terminal visualization that brings your file system to life. Watch files pulse with heat as they change, see git status at a glance, and experience your codebase breathing in real-time.
+A mesmerizing terminal visualization that brings your file system to life. Watch files heat decay as they change, see git status at a glance, and experience your codebase breathing in real-time.
 
 ```
-watching: /Users/dev/myproject  3↑
+watching: /Users/dev/myproject  ↑3
 
-myproject/
-├── src/
-│   ├── ✚ App.tsx                                    MODIFIED 2s █████░ 78%
++ myproject/
+├── + src/
+│   ├── ✚ App.tsx                               MODIFIED 2s ██████░
 │   ├── ✚ components/
-│   │   └── ● Button.tsx                             CREATED 8s ███░░░ 45%
-│   ├── utils/
-│   │   └── helpers.ts
+│   │   └── ● Button.tsx                        CREATED 8s ████░░░
+│   │       ⋮ +2 more
+│   ├── utils/...
 │   └── index.ts
 ├── … package.json
 └── README.md
@@ -21,11 +21,14 @@ myproject/
 
 ## ✨ Features
 
-- **🌡️ Heat Visualization** — Recently changed files glow hot with color-coded heat bars that decay over time
+- **🌡️ Heat Visualization** — 7-color thermal gradient (red→blue) shows recency at a glance
 - **🎨 Git Status Integration** — Instantly see staged, unstaged, untracked, and conflicted files with colored symbols
 - **🌬️ Breathing Mode** — The tree auto-refreshes, showing heat decay in real-time like a living organism
 - **📐 Space-Aware Layout** — Adapts to terminal size, collapsing cold branches when space is limited
-- **👻 Ghost Mode** — Deleted files fade out gracefully over multiple frames
+- **🔝 Priority Bubbling** — Hot files and git-status items bubble to the top, always visible
+- **📊 Git-First Sorting** — Files with git status appear first within directories
+- **👻 Smart Ghosts** — Tracked deleted files stay visible until committed; untracked fade naturally
+- **⋮ Partial Collapse** — Shows `⋮ +N more` when some directory contents are hidden
 - **⚡ Debounced Updates** — Smooth rendering even during rapid file changes
 
 ## 📦 Installation
@@ -38,6 +41,19 @@ cd watchers
 # Install dependencies
 npm install
 ```
+
+### Global Installation
+
+```bash
+# Link globally to use from anywhere
+npm link
+
+# Now you can use it in any directory
+cd ~/any-project
+watchers .
+```
+
+To unlink: `npm unlink -g watchers`
 
 ## 🚀 Usage
 
@@ -73,24 +89,28 @@ node bin/watch.mjs . --breathe 500
 | `✖` | 🔴 Red | Merge conflicts |
 | `✚` | 🟡 Yellow | Unstaged changes |
 | `●` | 🟢 Green | Staged for commit |
-| `…` | ⚪ Gray | Untracked files |
+| `…` | 🟢 Green | Untracked (new to project) |
 | `⇅` | 🟣 Magenta | Ahead and behind remote |
 | `↑` | 🔵 Cyan | Ahead of remote |
 | `↓` | 🔴 Red | Behind remote |
 
 ## 🌡️ Heat System
 
-Files pulse with heat based on how recently they changed:
+Files pulse with a 7-segment thermal gradient from hot to cold:
 
 ```
-█████░  80%+  — Just changed (bright, bold)
-████░░  60%   — Recent activity
-███░░░  40%   — Cooling down
-██░░░░  20%   — Getting cold
-█░░░░░  <20%  — Cold (dims and may collapse)
+███████  brightRed     — Just changed (< 1s)
+██████░  red           — Hot
+█████░░  magenta       — Warm  
+████░░░  brightMagenta — Cooling
+███░░░░  cyan          — Cool
+██░░░░░  brightCyan    — Cold
+█░░░░░░  blue          — Coldest
 ```
 
-Heat decays exponentially with a ~10 second half-life. The breathing timer keeps the visualization alive, smoothly updating heat bars as files cool down.
+Heat decays exponentially with a ~10 second half-life. The breathing timer keeps the visualization alive, smoothly transitioning colors as files cool down.
+
+**Note:** The heat bar color is always based on temperature, independent of git status. Filenames use git colors, bars use thermal colors.
 
 ## 📁 Project Structure
 
