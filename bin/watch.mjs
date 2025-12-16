@@ -166,7 +166,7 @@ async function main() {
 	const ghostTimer = setInterval(async () => {
 		const hadGhosts = treeState.ghosts.size > 0
 		if (hadGhosts) {
-			treeState.advanceGhosts()
+			treeState.advanceGhosts(gitStatus)
 			await doRender()
 		}
 	}, 1000)
