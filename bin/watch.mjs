@@ -23,6 +23,7 @@ function parseArgs() {
 		interval: 100,
 		ghostSteps: 3,
 		git: true,
+		breathe: 2000,
 	}
 	
 	let i = 0
@@ -39,6 +40,8 @@ function parseArgs() {
 			options.ghostSteps = parseInt(args[++i], 10) || 3
 		} else if (arg === '--no-git') {
 			options.git = false
+		} else if (arg === '--breathe' || arg === '-b') {
+			options.breathe = parseInt(args[++i], 10) || 2000
 		} else if (arg === '--help' || arg === '-h') {
 			printHelp()
 			process.exit(0)
@@ -66,6 +69,7 @@ Options:
   --history, -n <num>    Rolling history size (default: 4)
   --ignore, -i <glob>    Add glob pattern to ignore (can use multiple times)
   --interval <ms>        Debounce interval in ms (default: 100)
+  --breathe, -b <ms>     Auto-refresh interval for heat decay (default: 2000)
   --ghost-steps <num>    Fade steps for deleted items (default: 3)
   --no-git               Disable git status indicators
   --help, -h             Show this help message
@@ -166,9 +170,15 @@ async function main() {
 		}
 	}, 1000)
 	
+	// Breathe timer - periodic refresh for heat decay visualization
+	const breatheTimer = setInterval(async () => {
+		await doRender()
+	}, options.breathe)
+	
 	// Cleanup on exit
 	const handleExit = () => {
 		clearInterval(ghostTimer)
+		clearInterval(breatheTimer)
 		watcher.stop()
 		cleanup()
 	}
