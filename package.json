@@ -1,0 +1,25 @@
+{
+	"name": "watchers",
+	"version": "1.0.0",
+	"description": "Live file watcher with adaptive tree visualization",
+	"type": "module",
+	"bin": {
+		"watchers": "./bin/watch.mjs"
+	},
+	"scripts": {
+		"start": "node bin/watch.mjs",
+		"watch": "node bin/watch.mjs ."
+	},
+	"keywords": [
+		"file-watcher",
+		"tree",
+		"visualization",
+		"terminal"
+	],
+	"license": "MIT",
+	"dependencies": {
+		"chokidar": "^3.5.3",
+		"chalk": "^5.3.0"
+	}
+}
+
