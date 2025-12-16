@@ -8,6 +8,7 @@ import { FileWatcher, createDebouncedHandler } from '../lib/file-watcher.mjs'
 import { generateLayout } from '../lib/layout.mjs'
 import { createRenderer } from '../lib/renderer.mjs'
 import { setupTerminal, onResize, getTerminalSize } from '../lib/terminal.mjs'
+import { GitStatus } from '../lib/git-status.mjs'
 
 /**
  * Parse command line arguments
@@ -21,6 +22,7 @@ function parseArgs() {
 		ignore: ['**/node_modules/**', '**/.git/**', '**/dist/**'],
 		interval: 100,
 		ghostSteps: 3,
+		git: true,
 	}
 	
 	let i = 0
@@ -35,6 +37,8 @@ function parseArgs() {
 			options.interval = parseInt(args[++i], 10) || 100
 		} else if (arg === '--ghost-steps') {
 			options.ghostSteps = parseInt(args[++i], 10) || 3
+		} else if (arg === '--no-git') {
+			options.git = false
 		} else if (arg === '--help' || arg === '-h') {
 			printHelp()
 			process.exit(0)
@@ -63,7 +67,17 @@ Options:
   --ignore, -i <glob>    Add glob pattern to ignore (can use multiple times)
   --interval <ms>        Debounce interval in ms (default: 100)
   --ghost-steps <num>    Fade steps for deleted items (default: 3)
+  --no-git               Disable git status indicators
   --help, -h             Show this help message
+
+Git Status Symbols:
+  ✖  Conflicts (red)
+  ✚  Unstaged changes (yellow)
+  ●  Staged (green)
+  …  Untracked (gray)
+  ⇅  Ahead and behind (magenta)
+  ↑  Ahead (cyan)
+  ↓  Behind (red)
 
 Examples:
   node bin/watch.mjs .
@@ -90,22 +104,37 @@ async function main() {
 		ignored: options.ignore,
 	})
 	
+	// Initialize git status tracker (if enabled)
+	let gitStatus = null
+	if (options.git) {
+		gitStatus = new GitStatus(watchPath)
+		await gitStatus.init()
+	}
+	
 	// Initialize renderer
 	const renderer = createRenderer(watchPath)
+	if (gitStatus) {
+		renderer.setGitStatus(gitStatus)
+	}
 	
 	// Setup terminal (hide cursor, handle cleanup)
 	const cleanup = setupTerminal()
 	
 	// Render function
-	const doRender = () => {
+	const doRender = async () => {
+		// Refresh git status before rendering (if enabled)
+		if (gitStatus) {
+			await gitStatus.refresh()
+		}
+		
 		const layout = generateLayout(treeState, {
 			terminalSize: getTerminalSize(),
 		})
-		renderer.render(layout)
+		renderer.render(layout, gitStatus)
 	}
 	
 	// Handle file change events (debounced)
-	const handleChanges = createDebouncedHandler((events) => {
+	const handleChanges = createDebouncedHandler(async (events) => {
 		for (const event of events) {
 			if (event.eventType === 'unlink' || event.eventType === 'unlinkDir') {
 				treeState.removeNode(event.path, event.eventType)
@@ -113,7 +142,7 @@ async function main() {
 				treeState.setNode(event.path, event.type, event.eventType)
 			}
 		}
-		doRender()
+		await doRender()
 	}, options.interval)
 	
 	// Subscribe to watcher events
@@ -124,16 +153,16 @@ async function main() {
 	})
 	
 	// Handle terminal resize
-	onResize(() => {
-		doRender()
+	onResize(async () => {
+		await doRender()
 	})
 	
 	// Ghost fade timer - advance ghost states periodically
-	const ghostTimer = setInterval(() => {
+	const ghostTimer = setInterval(async () => {
 		const hadGhosts = treeState.ghosts.size > 0
 		if (hadGhosts) {
 			treeState.advanceGhosts()
-			doRender()
+			await doRender()
 		}
 	}, 1000)
 	
@@ -163,7 +192,7 @@ async function main() {
 		}
 		
 		// Initial render
-		doRender()
+		await doRender()
 		
 	} catch (error) {
 		cleanup()
