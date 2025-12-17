@@ -29,6 +29,7 @@ watching: /Users/dev/myproject  ↑3
 - **📊 Git-First Sorting** — Files with git status appear first within directories
 - **👻 Smart Ghosts** — Tracked deleted files stay visible until committed; untracked fade naturally
 - **⋮ Partial Collapse** — Shows `⋮ +N more` when some directory contents are hidden
+- **🎚️ Additive Weights** — Granular, composable priority system for fine-tuned control
 - **⚡ Debounced Updates** — Smooth rendering even during rapid file changes
 
 ## 📦 Installation
@@ -81,6 +82,7 @@ node bin/watch.mjs . --breathe 500
 | `--ignore` | `-i` | | Add glob patterns to ignore |
 | `--ghost-steps` | | `3` | Fade steps for deleted items |
 | `--no-git` | | | Disable git status indicators |
+
 
 ## 🎯 Git Status Symbols
 
@@ -135,17 +137,36 @@ watchers/
 2. **Tree State** — Maintains a virtual file tree with event history
 3. **Heat Scoring** — Calculates priority based on recency and event type
 4. **Git Integration** — Fetches status via `git status --porcelain`
-5. **Layout Engine** — Adapts tree to terminal height, collapsing cold branches
+5. **Layout Engine** — Weight-based priority system adapts tree to terminal height
 6. **Renderer** — Outputs ANSI-styled tree with in-place updates
 
-## 🔮 Event Priority
+## 🎚️ Priority Weight System
 
-When space is limited, watchers prioritizes showing:
+When space is limited, watchers uses an **additive weight system** to decide what to show. Each line gets a score from multiple categories:
 
-1. **Deleted** items (highest priority — dramatic!)
-2. **Created** items (something new appeared)
-3. **Modified** items (content changed)
-4. **Hot directories** (contain recent activity)
+| Category | Options | Weights |
+|----------|---------|---------|
+| **Git** | conflict, unstaged, staged, untracked | 800, 700, 600, 500 |
+| **Heat** | hot, cold | 350, 0 |
+| **Type** | dir, file | 100, 50 |
+| **Event** | deleted, created, modified | 150, 75, 50 |
+| **Context** | hasChildren, inHistory, ghost | 200, 100, 50 |
+
+**Example:** A hot unstaged file that was just modified:
+- type.file (50) + git.unstaged (700) + heat.hot (350) + event.change (50) = **1150**
+
+### Customizing Weights
+
+Edit `lib/layout.mjs` to tune priorities:
+
+```javascript
+// Prioritize deletions above everything
+WEIGHT.event.unlink = 900
+
+// Heat-first workflow (over git)
+WEIGHT.heat.hot = 800
+WEIGHT.git.unstaged = 300
+```
 
 ## 💡 Tips
 
