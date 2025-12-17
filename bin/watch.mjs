@@ -341,20 +341,23 @@ async function main() {
 		// Discover git roots: main repo + symlinked paths (one-time)
 		if (gitStatus) {
 			// Add the main watched directory to the cache
-			await GitStatus.getForPath(watchPath)
+			console.log(`Discovering git root for main: ${watchPath}`)
+			const mainGit = await GitStatus.getForPath(watchPath)
+			if (mainGit) {
+				console.log(`  Found git root: ${mainGit.gitRoot}`)
+			}
 			
-			// Track which git roots we've already discovered
-			const discoveredRoots = new Set()
+			// Track which real paths we've already checked
+			const checkedPaths = new Set()
 			
-			// Discover git roots for any node with a real path (symlinks and their children)
+			// Discover git roots for symlinked directories (check only the symlink targets themselves)
 			for (const node of treeState.nodes.values()) {
-				if (node.realPath && node.realPath !== node.path) {
-					// Use the real path to discover git root
-					// Only check once per unique real path parent to avoid redundant git calls
-					const checkPath = node.type === 'directory' ? node.realPath : dirname(node.realPath)
-					if (!discoveredRoots.has(checkPath)) {
-						discoveredRoots.add(checkPath)
-						await GitStatus.getForPath(checkPath)
+				if (node.isSymlink && node.realPath && !checkedPaths.has(node.realPath)) {
+					checkedPaths.add(node.realPath)
+					console.log(`Discovering git root for symlink: ${node.path} -> ${node.realPath}`)
+					const symlinkGit = await GitStatus.getForPath(node.realPath)
+					if (symlinkGit) {
+						console.log(`  Found git root: ${symlinkGit.gitRoot}`)
 					}
 				}
 			}
