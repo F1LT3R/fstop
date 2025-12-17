@@ -38,6 +38,7 @@ function parseArgs() {
 		ghostSteps: 3,
 		git: true,
 		breathe: 2000,
+		quick: false,
 	}
 	
 	let i = 0
@@ -56,6 +57,8 @@ function parseArgs() {
 			options.git = false
 		} else if (arg === '--breathe' || arg === '-b') {
 			options.breathe = parseInt(args[++i], 10) || 2000
+		} else if (arg === '--quick' || arg === '-q') {
+			options.quick = true
 		} else if (arg === '--help' || arg === '-h') {
 			printHelp()
 			process.exit(0)
@@ -86,6 +89,7 @@ Options:
   --breathe, -b <ms>     Auto-refresh interval for heat decay (default: 2000)
   --ghost-steps <num>    Fade steps for deleted items (default: 3)
   --no-git               Disable git status indicators
+  --quick, -q            Render once and exit (no watching)
   --help, -h             Show this help message
 
 Git Status Symbols:
@@ -123,25 +127,26 @@ async function main() {
 	})
 	
 	// Initialize git status tracker (if enabled)
+	// Note: We'll discover git roots after initial tree build
 	let gitStatus = null
-	if (options.git) {
-		gitStatus = new GitStatus(watchPath)
-		await gitStatus.init()
-	}
+	const gitEnabled = options.git
 	
 	// Initialize renderer
 	const renderer = createRenderer(watchPath)
-	if (gitStatus) {
+	if (gitEnabled) {
 		renderer.setGitStatus(gitStatus)
 	}
 	
-	// Setup terminal (hide cursor, handle cleanup)
-	const cleanup = setupTerminal()
-	
-	// Enable raw mode for keypresses
-	readline.emitKeypressEvents(process.stdin)
-	if (process.stdin.isTTY) {
-		process.stdin.setRawMode(true)
+	// Setup terminal (hide cursor, handle cleanup) - skip in quick mode
+	let cleanup = () => {}
+	if (!options.quick) {
+		cleanup = setupTerminal()
+		
+		// Enable raw mode for keypresses
+		readline.emitKeypressEvents(process.stdin)
+		if (process.stdin.isTTY) {
+			process.stdin.setRawMode(true)
+		}
 	}
 	
 	/**
@@ -170,8 +175,9 @@ async function main() {
 	}
 	
 	
-	// Keypress handler
-	process.stdin.on('keypress', async (str, key) => {
+	// Keypress handler (only in interactive mode)
+	if (!options.quick) {
+		process.stdin.on('keypress', async (str, key) => {
 		if (!key) return
 		
 		// Ctrl+C to exit
@@ -235,6 +241,7 @@ async function main() {
 			return
 		}
 	})
+	}
 	
 	// Render function
 	const doRender = async () => {
@@ -268,6 +275,7 @@ async function main() {
 	renderer.render(layout, gitStatus, {
 		cursorIndex,
 		filterPattern,
+		quick: options.quick,
 	})
 	}
 	
@@ -284,47 +292,50 @@ async function main() {
 		await doRender()
 	}, options.interval)
 	
-	// Subscribe to watcher events
-	watcher.on('change', handleChanges)
-	
-	watcher.on('error', (error) => {
-		// Silently skip permission-denied directories
-		if (error.code === 'EACCES' || error.code === 'EPERM') {
-			return
-		}
-		// Log other errors but continue running
-		console.error('Watcher error:', error.message)
-	})
-	
-	// Handle terminal resize
-	onResize(async () => {
-		await doRender()
-	})
-	
-	// Ghost fade timer - advance ghost states periodically
-	const ghostTimer = setInterval(async () => {
-		const hadGhosts = treeState.ghosts.size > 0
-		if (hadGhosts) {
-			treeState.advanceGhosts(gitStatus)
+	// Interactive mode setup (watchers, timers, event handlers)
+	if (!options.quick) {
+		// Subscribe to watcher events
+		watcher.on('change', handleChanges)
+		
+		watcher.on('error', (error) => {
+			// Silently skip permission-denied directories
+			if (error.code === 'EACCES' || error.code === 'EPERM') {
+				return
+			}
+			// Log other errors but continue running
+			console.error('Watcher error:', error.message)
+		})
+		
+		// Handle terminal resize
+		onResize(async () => {
 			await doRender()
+		})
+		
+		// Ghost fade timer - advance ghost states periodically
+		const ghostTimer = setInterval(async () => {
+			const hadGhosts = treeState.ghosts.size > 0
+			if (hadGhosts) {
+				treeState.advanceGhosts(gitStatus)
+				await doRender()
+			}
+		}, 1000)
+		
+		// Breathe timer - periodic refresh for heat decay and git status
+		const breatheTimer = setInterval(async () => {
+			await doRender()
+		}, options.breathe)
+		
+		// Cleanup on exit
+		const handleExit = () => {
+			clearInterval(ghostTimer)
+			clearInterval(breatheTimer)
+			watcher.stop()
+			cleanup()
 		}
-	}, 1000)
-	
-	// Breathe timer - periodic refresh for heat decay and git status
-	const breatheTimer = setInterval(async () => {
-		await doRender()
-	}, options.breathe)
-	
-	// Cleanup on exit
-	const handleExit = () => {
-		clearInterval(ghostTimer)
-		clearInterval(breatheTimer)
-		watcher.stop()
-		cleanup()
+		
+		process.on('SIGINT', handleExit)
+		process.on('SIGTERM', handleExit)
 	}
-	
-	process.on('SIGINT', handleExit)
-	process.on('SIGTERM', handleExit)
 	
 	// Start watching
 	try {
@@ -339,26 +350,22 @@ async function main() {
 		treeState.detectSymlinks()
 		
 		// Discover git roots: main repo + symlinked paths (one-time)
-		if (gitStatus) {
+		if (gitEnabled) {
 			// Add the main watched directory to the cache
-			console.log(`Discovering git root for main: ${watchPath}`)
 			const mainGit = await GitStatus.getForPath(watchPath)
 			if (mainGit) {
-				console.log(`  Found git root: ${mainGit.gitRoot}`)
+				gitStatus = mainGit // Keep reference for renderer
 			}
 			
-			// Track which real paths we've already checked
+			// Track which symlink paths we've already checked
 			const checkedPaths = new Set()
 			
-			// Discover git roots for symlinked directories (check only the symlink targets themselves)
+			// Discover git roots for symlinked directories (use symlink path, not realPath)
+			// Git will naturally follow the symlink and output paths relative to it
 			for (const node of treeState.nodes.values()) {
-				if (node.isSymlink && node.realPath && !checkedPaths.has(node.realPath)) {
-					checkedPaths.add(node.realPath)
-					console.log(`Discovering git root for symlink: ${node.path} -> ${node.realPath}`)
-					const symlinkGit = await GitStatus.getForPath(node.realPath)
-					if (symlinkGit) {
-						console.log(`  Found git root: ${symlinkGit.gitRoot}`)
-					}
+				if (node.isSymlink && !checkedPaths.has(node.path)) {
+					checkedPaths.add(node.path)
+					await GitStatus.getForPath(node.path)
 				}
 			}
 		}
@@ -371,6 +378,11 @@ async function main() {
 		
 		// Initial render
 		await doRender()
+		
+		// Quick mode: exit after first render
+		if (options.quick) {
+			process.exit(0)
+		}
 		
 	} catch (error) {
 		cleanup()
