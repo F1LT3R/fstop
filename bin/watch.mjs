@@ -3,12 +3,20 @@
 // CLI entry point - wires together watcher, state, layout, and renderer
 
 import { resolve } from 'path'
+import readline from 'readline'
+import { exec } from 'child_process'
 import { TreeState } from '../lib/tree-state.mjs'
 import { FileWatcher, createDebouncedHandler } from '../lib/file-watcher.mjs'
 import { generateLayout } from '../lib/layout.mjs'
 import { createRenderer } from '../lib/renderer.mjs'
 import { setupTerminal, onResize, getTerminalSize } from '../lib/terminal.mjs'
 import { GitStatus } from '../lib/git-status.mjs'
+
+// Interactive state
+let cursorIndex = 0
+let filterMode = false
+let filterPattern = ''
+let visibleLines = []
 
 /**
  * Parse command line arguments
@@ -124,6 +132,124 @@ async function main() {
 	// Setup terminal (hide cursor, handle cleanup)
 	const cleanup = setupTerminal()
 	
+	// Enable raw mode for keypresses
+	readline.emitKeypressEvents(process.stdin)
+	if (process.stdin.isTTY) {
+		process.stdin.setRawMode(true)
+	}
+	
+	/**
+	 * Open selected file/directory
+	 */
+	function openSelected() {
+		const line = visibleLines[cursorIndex]
+		if (!line) return
+		
+		const path = line.node?.path
+		if (!path) return
+		
+		// macOS: open, Linux: xdg-open
+		const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
+		exec(`${cmd} "${path}"`, (err) => {
+			// Silently ignore errors
+		})
+	}
+	
+	/**
+	 * Move cursor up or down
+	 */
+	function moveCursor(delta) {
+		const maxIndex = Math.max(0, visibleLines.length - 1)
+		cursorIndex = Math.max(0, Math.min(maxIndex, cursorIndex + delta))
+	}
+	
+	/**
+	 * Enter filter mode
+	 */
+	function enterFilterMode() {
+		filterMode = true
+		filterPattern = ''
+	}
+	
+	/**
+	 * Exit filter mode
+	 */
+	function exitFilterMode() {
+		filterMode = false
+		filterPattern = ''
+	}
+	
+	// Keypress handler
+	process.stdin.on('keypress', async (str, key) => {
+		if (!key) return
+		
+		// Ctrl+C to exit
+		if (key.name === 'c' && key.ctrl) {
+			handleExit()
+			return
+		}
+		
+		// Cursor navigation (ALWAYS active, even during filter)
+		if (key.name === 'up') {
+			moveCursor(-1)
+			await doRender()
+			return
+		}
+		if (key.name === 'down') {
+			moveCursor(1)
+			await doRender()
+			return
+		}
+		
+		// Enter to open selected
+		if (key.name === 'return') {
+			openSelected()
+			if (filterMode) exitFilterMode()
+			await doRender()
+			return
+		}
+		
+		// Filter mode toggle
+		if (str === '/' && !filterMode) {
+			enterFilterMode()
+			await doRender()
+			return
+		}
+		
+		// Escape to exit filter mode
+		if (key.name === 'escape' && filterMode) {
+			exitFilterMode()
+			await doRender()
+			return
+		}
+		
+		// Typing in filter mode
+		if (filterMode) {
+			if (key.name === 'backspace') {
+				filterPattern = filterPattern.slice(0, -1)
+				cursorIndex = 0  // Jump to first match
+				await doRender()
+			} else if (str && str.length === 1 && !key.ctrl && !key.meta) {
+				filterPattern += str
+				cursorIndex = 0  // Jump to first match
+				await doRender()
+			}
+			return
+		}
+		
+		// j/k navigation only when NOT in filter mode
+		if (str === 'k') {
+			moveCursor(-1)
+			await doRender()
+			return
+		}
+		if (str === 'j') {
+			moveCursor(1)
+			await doRender()
+			return
+		}
+	})
+	
 	// Render function
 	const doRender = async () => {
 		// Refresh git status before rendering (if enabled)
@@ -134,8 +260,30 @@ async function main() {
 		const layout = generateLayout(treeState, {
 			terminalSize: getTerminalSize(),
 			gitStatus,
+			filterPattern,
 		})
-		renderer.render(layout, gitStatus)
+		
+		// Store visible lines for cursor navigation
+		visibleLines = layout.lines || []
+		
+		// Auto-jump to single match (fzf-style)
+		if (filterPattern) {
+			const matchingLines = visibleLines.filter(l => l.filterMatch && l.lineType === 'node')
+			if (matchingLines.length === 1) {
+				cursorIndex = visibleLines.indexOf(matchingLines[0])
+			}
+		}
+		
+		// Clamp cursor to valid range
+		if (cursorIndex >= visibleLines.length) {
+			cursorIndex = Math.max(0, visibleLines.length - 1)
+		}
+		
+		renderer.render(layout, gitStatus, {
+			cursorIndex,
+			filterMode,
+			filterPattern,
+		})
 	}
 	
 	// Handle file change events (debounced)
@@ -171,9 +319,14 @@ async function main() {
 		}
 	}, 1000)
 	
-	// Breathe timer - periodic refresh for heat decay visualization
+	// Breathe timer - only redraw if there's something cooling
 	const breatheTimer = setInterval(async () => {
-		await doRender()
+		const hasHotItems = treeState.hasHotItems()
+		const hasGhosts = treeState.ghosts.size > 0
+		
+		if (hasHotItems || hasGhosts) {
+			await doRender()
+		}
 	}, options.breathe)
 	
 	// Cleanup on exit
