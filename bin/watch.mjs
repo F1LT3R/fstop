@@ -14,7 +14,6 @@ import { GitStatus } from '../lib/git-status.mjs'
 
 // Interactive state
 let cursorIndex = 0
-let filterMode = false
 let filterPattern = ''
 let visibleLines = []
 
@@ -163,21 +162,6 @@ async function main() {
 		cursorIndex = Math.max(0, Math.min(maxIndex, cursorIndex + delta))
 	}
 	
-	/**
-	 * Enter filter mode
-	 */
-	function enterFilterMode() {
-		filterMode = true
-		filterPattern = ''
-	}
-	
-	/**
-	 * Exit filter mode
-	 */
-	function exitFilterMode() {
-		filterMode = false
-		filterPattern = ''
-	}
 	
 	// Keypress handler
 	process.stdin.on('keypress', async (str, key) => {
@@ -201,41 +185,36 @@ async function main() {
 			return
 		}
 		
-		// Enter to open selected
-		if (key.name === 'return') {
-			openSelected()
-			if (filterMode) exitFilterMode()
-			await doRender()
-			return
-		}
-		
-		// Filter mode toggle
-		if (str === '/' && !filterMode) {
-			enterFilterMode()
-			await doRender()
-			return
-		}
-		
-		// Escape to exit filter mode
-		if (key.name === 'escape' && filterMode) {
-			exitFilterMode()
-			await doRender()
-			return
-		}
-		
-		// Typing in filter mode
-		if (filterMode) {
-			if (key.name === 'backspace') {
-				filterPattern = filterPattern.slice(0, -1)
-				cursorIndex = 0  // Jump to first match
-				await doRender()
-			} else if (str && str.length === 1 && !key.ctrl && !key.meta) {
-				filterPattern += str
-				cursorIndex = 0  // Jump to first match
-				await doRender()
-			}
-			return
-		}
+	// Enter to open selected
+	if (key.name === 'return') {
+		openSelected()
+		await doRender()
+		return
+	}
+	
+	// Escape to clear filter
+	if (key.name === 'escape') {
+		filterPattern = ''
+		cursorIndex = 0
+		await doRender()
+		return
+	}
+	
+	// Backspace to remove filter character (always listening)
+	if (key.name === 'backspace') {
+		filterPattern = filterPattern.slice(0, -1)
+		cursorIndex = 0  // Jump to first match
+		await doRender()
+		return
+	}
+	
+	// Typing adds to filter (always listening)
+	if (str && str.length === 1 && !key.ctrl && !key.meta) {
+		filterPattern += str
+		cursorIndex = 0  // Jump to first match
+		await doRender()
+		return
+	}
 		
 		// j/k navigation only when NOT in filter mode
 		if (str === 'k') {
@@ -279,11 +258,10 @@ async function main() {
 			cursorIndex = Math.max(0, visibleLines.length - 1)
 		}
 		
-		renderer.render(layout, gitStatus, {
-			cursorIndex,
-			filterMode,
-			filterPattern,
-		})
+	renderer.render(layout, gitStatus, {
+		cursorIndex,
+		filterPattern,
+	})
 	}
 	
 	// Handle file change events (debounced)
