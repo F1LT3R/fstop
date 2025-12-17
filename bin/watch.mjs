@@ -2,7 +2,7 @@
 
 // CLI entry point - wires together watcher, state, layout, and renderer
 
-import { resolve } from 'path'
+import { resolve, dirname } from 'path'
 import readline from 'readline'
 import { exec } from 'child_process'
 import { TreeState } from '../lib/tree-state.mjs'
@@ -240,7 +240,7 @@ async function main() {
 	const doRender = async () => {
 		// Refresh git status before rendering (if enabled)
 		if (gitStatus) {
-			await gitStatus.refresh()
+			await GitStatus.refreshAll()
 		}
 		
 		const layout = generateLayout(treeState, {
@@ -333,6 +333,31 @@ async function main() {
 		// Build initial tree from discovered files
 		for (const item of initialPaths) {
 			treeState.setNode(item.path, item.type, null)
+		}
+		
+		// Detect symlinks once (synchronous, fast)
+		treeState.detectSymlinks()
+		
+		// Discover git roots: main repo + symlinked paths (one-time)
+		if (gitStatus) {
+			// Add the main watched directory to the cache
+			await GitStatus.getForPath(watchPath)
+			
+			// Track which git roots we've already discovered
+			const discoveredRoots = new Set()
+			
+			// Discover git roots for any node with a real path (symlinks and their children)
+			for (const node of treeState.nodes.values()) {
+				if (node.realPath && node.realPath !== node.path) {
+					// Use the real path to discover git root
+					// Only check once per unique real path parent to avoid redundant git calls
+					const checkPath = node.type === 'directory' ? node.realPath : dirname(node.realPath)
+					if (!discoveredRoots.has(checkPath)) {
+						discoveredRoots.add(checkPath)
+						await GitStatus.getForPath(checkPath)
+					}
+				}
+			}
 		}
 		
 		// Clear event info for initial files (they weren't "changed")
