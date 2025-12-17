@@ -297,14 +297,9 @@ async function main() {
 		}
 	}, 1000)
 	
-	// Breathe timer - only redraw if there's something cooling
+	// Breathe timer - periodic refresh for heat decay and git status
 	const breatheTimer = setInterval(async () => {
-		const hasHotItems = treeState.hasHotItems()
-		const hasGhosts = treeState.ghosts.size > 0
-		
-		if (hasHotItems || hasGhosts) {
-			await doRender()
-		}
+		await doRender()
 	}, options.breathe)
 	
 	// Cleanup on exit
