@@ -1,4 +1,4 @@
-# 🔥 Watchers
+# 🔥 fstop
 
 A mesmerizing terminal visualization that brings your file system to life. Watch files heat decay as they change, see git status at a glance, and experience your codebase breathing in real-time.
 
@@ -36,8 +36,8 @@ watching: /Users/dev/myproject  ↑3
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/watchers.git
-cd watchers
+git clone https://github.com/yourusername/fstop.git
+cd fstop
 
 # Install dependencies
 npm install
@@ -51,10 +51,10 @@ npm link
 
 # Now you can use it in any directory
 cd ~/any-project
-watchers .
+fstop .
 ```
 
-To unlink: `npm unlink -g watchers`
+To unlink: `npm unlink -g fstop`
 
 ## 🚀 Usage
 
@@ -117,7 +117,7 @@ Heat decays exponentially with a ~10 second half-life. The breathing timer keeps
 ## 📁 Project Structure
 
 ```
-watchers/
+fstop/
 ├── bin/
 │   └── watch.mjs          # CLI entry point
 ├── lib/
@@ -142,7 +142,7 @@ watchers/
 
 ## 🎚️ Priority Weight System
 
-When space is limited, watchers uses an **additive weight system** to decide what to show. Each line gets a score from multiple categories:
+When space is limited, fstop uses an **additive weight system** to decide what to show. Each line gets a score from multiple categories:
 
 | Category | Options | Weights |
 |----------|---------|---------|

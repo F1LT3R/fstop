@@ -60,7 +60,7 @@ function parseArgs() {
  */
 function printHelp() {
 	console.log(`
-watchers - Live file watcher with adaptive tree visualization
+fstop - Live filesystem monitor with heat decay and adaptive tree display
 
 Usage:
   node bin/watch.mjs [directory] [options]

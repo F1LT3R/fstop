@@ -1,10 +1,10 @@
 {
-	"name": "watchers",
+	"name": "fstop",
 	"version": "1.0.0",
-	"description": "Live file watcher with adaptive tree visualization",
+	"description": "Live filesystem monitor with heat decay and adaptive tree display",
 	"type": "module",
 	"bin": {
-		"watchers": "./bin/watch.mjs"
+		"fstop": "./bin/watch.mjs"
 	},
 	"scripts": {
 		"start": "node bin/watch.mjs",
@@ -16,7 +16,7 @@
 		"visualization",
 		"terminal"
 	],
-	"license": "MIT",
+	"license": "SEE LICENSE IN LICENSE.md",
 	"dependencies": {
 		"chokidar": "^3.5.3",
 		"chalk": "^5.3.0"
