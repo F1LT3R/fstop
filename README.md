@@ -34,6 +34,7 @@ watching: /Users/dev/myproject  ↑3
 - **🔍 Filter Mode** — Press `/` to search (vim-style), matches highlighted with yellow background
 - **🔗 Clickable Links** — Filenames are clickable in iTerm and compatible terminals (OSC 8)
 - **⚡ Debounced Updates** — Smooth rendering even during rapid file changes
+- **🔗 Symlink Support** — Follows symlinked directories, showing their contents live; detects and prevents loops
 
 ## 📦 Installation
 
@@ -166,12 +167,13 @@ fstop/
 
 ## 🎨 How It Works
 
-1. **File Watcher** — Chokidar monitors the directory for changes
-2. **Tree State** — Maintains a virtual file tree with event history
-3. **Heat Scoring** — Calculates priority based on recency and event type
-4. **Git Integration** — Fetches status via `git status --porcelain`
-5. **Layout Engine** — Weight-based priority system adapts tree to terminal height
-6. **Renderer** — Outputs ANSI-styled tree with in-place updates
+1. **File Watcher** — Chokidar monitors the directory for changes (follows symlinked directories)
+2. **Symlink Loop Detection** — Preflight check detects and prevents directory symlink cycles
+3. **Tree State** — Maintains a virtual file tree with event history
+4. **Heat Scoring** — Calculates priority based on recency and event type
+5. **Git Integration** — Fetches status via `git status --porcelain`
+6. **Layout Engine** — Weight-based priority system adapts tree to terminal height
+7. **Renderer** — Outputs ANSI-styled tree with in-place updates
 
 ## 🎚️ Priority Weight System
 
@@ -207,6 +209,20 @@ WEIGHT.git.unstaged = 300
 - **Use `--breathe 500`** for faster, more responsive heat decay
 - **Use `--history 8`** to track more simultaneous changes
 - **Press `Ctrl+C`** to exit cleanly
+- **Symlinked directories** are followed automatically; if you have symlink loops, fstop will exit with an error before starting
+
+## 📁 What Gets Watched
+
+By default, fstop ignores:
+- `**/node_modules/**`
+- `**/.git/**`
+- `**/tmp/**`
+- `**/localdata/**`, `**/.postgres/**`, `**/.mysql/**` (database data)
+- `**/.cache/**`
+
+**Note:** `dist/` directories are **not** ignored by default. Use `--ignore "**/dist/**"` if you want to exclude them.
+
+Symlinked directories are followed, including those pointing outside the watched root. If a symlink loop is detected, fstop will fail with a clear error message before starting the watcher.
 
 ## 🛠️ Requirements
 

@@ -26,7 +26,14 @@ function parseArgs() {
 	const options = {
 		path: '.',
 		history: 4,
-		ignore: ['**/node_modules/**', '**/.git/**', '**/dist/**'],
+		ignore: [
+			'**/node_modules/**',
+			'**/.git/**',
+			'**/localdata/**',        // Database data directories
+			'**/.postgres/**',        // PostgreSQL data
+			'**/.mysql/**',           // MySQL data
+			'**/.cache/**',           // Cache directories
+		],
 		interval: 100,
 		ghostSteps: 3,
 		git: true,
@@ -272,6 +279,7 @@ async function main() {
 			} else {
 				treeState.setNode(event.path, event.type, event.eventType)
 			}
+
 		}
 		await doRender()
 	}, options.interval)
@@ -280,7 +288,12 @@ async function main() {
 	watcher.on('change', handleChanges)
 	
 	watcher.on('error', (error) => {
-		console.error('Watcher error:', error)
+		// Silently skip permission-denied directories
+		if (error.code === 'EACCES' || error.code === 'EPERM') {
+			return
+		}
+		// Log other errors but continue running
+		console.error('Watcher error:', error.message)
 	})
 	
 	// Handle terminal resize
@@ -343,4 +356,5 @@ main().catch((error) => {
 	console.error('Fatal error:', error)
 	process.exit(1)
 })
+
 
