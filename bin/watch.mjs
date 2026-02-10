@@ -39,6 +39,7 @@ function parseArgs() {
 		git: true,
 		breathe: 2000,
 		quick: false,
+		skipLoopCheck: true,
 	}
 	
 	let i = 0
@@ -59,6 +60,8 @@ function parseArgs() {
 			options.breathe = parseInt(args[++i], 10) || 2000
 		} else if (arg === '--quick' || arg === '-q') {
 			options.quick = true
+		} else if (arg === '--loopcheck') {
+			options.skipLoopCheck = false
 		} else if (arg === '--help' || arg === '-h') {
 			printHelp()
 			process.exit(0)
@@ -90,6 +93,7 @@ Options:
   --ghost-steps <num>    Fade steps for deleted items (default: 3)
   --no-git               Disable git status indicators
   --quick, -q            Render once and exit (no watching)
+  --loopcheck            Enable symlink loop detection (slower startup, safer)
   --help, -h             Show this help message
 
 Git Status Symbols:
@@ -124,6 +128,7 @@ async function main() {
 	// Initialize file watcher
 	const watcher = new FileWatcher(watchPath, {
 		ignored: options.ignore,
+		skipLoopCheck: options.skipLoopCheck,
 	})
 	
 	// Initialize git status tracker (if enabled)
@@ -346,8 +351,8 @@ async function main() {
 			treeState.setNode(item.path, item.type, null)
 		}
 		
-		// Detect symlinks once (synchronous, fast)
-		treeState.detectSymlinks()
+		// Detect symlinks once (async, parallel)
+		await treeState.detectSymlinks()
 		
 		// Discover git roots: main repo + symlinked paths (one-time)
 		if (gitEnabled) {
@@ -360,14 +365,19 @@ async function main() {
 			// Track which symlink paths we've already checked
 			const checkedPaths = new Set()
 			
-			// Discover git roots for symlinked directories (use symlink path, not realPath)
-			// Git will naturally follow the symlink and output paths relative to it
+			// Collect all symlinked directories to check
+			const symlinkedDirs = []
 			for (const node of treeState.nodes.values()) {
 				if (node.isSymlink && !checkedPaths.has(node.path)) {
 					checkedPaths.add(node.path)
-					await GitStatus.getForPath(node.path)
+					symlinkedDirs.push(node.path)
 				}
 			}
+			
+			// Discover git roots in parallel
+			await Promise.all(
+				symlinkedDirs.map(path => GitStatus.getForPath(path))
+			)
 		}
 		
 		// Clear event info for initial files (they weren't "changed")
