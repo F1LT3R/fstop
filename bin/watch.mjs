@@ -16,6 +16,7 @@ import { GitStatus } from '../lib/git-status.mjs'
 let cursorIndex = 0
 let filterPattern = ''
 let visibleLines = []
+let dirty = true  // Dirty flag for change-driven rendering
 
 /**
  * Parse command line arguments
@@ -194,11 +195,13 @@ async function main() {
 		// Cursor navigation (ALWAYS active, even during filter)
 		if (key.name === 'up') {
 			moveCursor(-1)
+			dirty = true
 			await doRender()
 			return
 		}
 		if (key.name === 'down') {
 			moveCursor(1)
+			dirty = true
 			await doRender()
 			return
 		}
@@ -206,6 +209,7 @@ async function main() {
 	// Enter to open selected
 	if (key.name === 'return') {
 		openSelected()
+		dirty = true
 		await doRender()
 		return
 	}
@@ -214,6 +218,7 @@ async function main() {
 	if (key.name === 'escape') {
 		filterPattern = ''
 		cursorIndex = 0
+		dirty = true
 		await doRender()
 		return
 	}
@@ -222,6 +227,7 @@ async function main() {
 	if (key.name === 'backspace') {
 		filterPattern = filterPattern.slice(0, -1)
 		cursorIndex = 0  // Jump to first match
+		dirty = true
 		await doRender()
 		return
 	}
@@ -230,6 +236,7 @@ async function main() {
 	if (str && str.length === 1 && !key.ctrl && !key.meta) {
 		filterPattern += str
 		cursorIndex = 0  // Jump to first match
+		dirty = true
 		await doRender()
 		return
 	}
@@ -237,11 +244,13 @@ async function main() {
 		// j/k navigation only when NOT in filter mode
 		if (str === 'k') {
 			moveCursor(-1)
+			dirty = true
 			await doRender()
 			return
 		}
 		if (str === 'j') {
 			moveCursor(1)
+			dirty = true
 			await doRender()
 			return
 		}
@@ -250,9 +259,18 @@ async function main() {
 	
 	// Render function
 	const doRender = async () => {
+		// Early exit if nothing changed
+		if (!dirty) {
+			return
+		}
+		
 		// Refresh git status before rendering (if enabled)
+		// Git status changes can also set dirty flag
 		if (gitStatus) {
-			await GitStatus.refreshAll()
+			const gitChanged = await GitStatus.refreshAll()
+			if (gitChanged) {
+				dirty = true
+			}
 		}
 		
 		const layout = generateLayout(treeState, {
@@ -282,6 +300,9 @@ async function main() {
 		filterPattern,
 		quick: options.quick,
 	})
+	
+	// Clear dirty flag after successful render
+	dirty = false
 	}
 	
 	// Handle file change events (debounced)
@@ -294,6 +315,7 @@ async function main() {
 			}
 
 		}
+		dirty = true
 		await doRender()
 	}, options.interval)
 	
@@ -313,6 +335,7 @@ async function main() {
 		
 		// Handle terminal resize
 		onResize(async () => {
+			dirty = true
 			await doRender()
 		})
 		
@@ -321,13 +344,18 @@ async function main() {
 			const hadGhosts = treeState.ghosts.size > 0
 			if (hadGhosts) {
 				treeState.advanceGhosts(gitStatus)
+				dirty = true
 				await doRender()
 			}
 		}, 1000)
 		
 		// Breathe timer - periodic refresh for heat decay and git status
+		// Only render when items are hot or ghosts exist
 		const breatheTimer = setInterval(async () => {
-			await doRender()
+			if (treeState.hasHotItems() || treeState.ghosts.size > 0) {
+				dirty = true
+				await doRender()
+			}
 		}, options.breathe)
 		
 		// Cleanup on exit
