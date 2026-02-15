@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/fstop-logo.png" alt="fstop logo" width="600">
+</p>
+
 # 🔥 fstop
 
 A mesmerizing terminal visualization that brings your file system to life. Watch files heat decay as they change, see git status at a glance, and experience your codebase breathing in real-time.
