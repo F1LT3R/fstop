@@ -2,15 +2,16 @@
 
 // CLI entry point - wires together watcher, state, layout, and renderer
 
-import { resolve, dirname } from 'path'
+import { resolve, dirname, extname, relative } from 'path'
 import readline from 'readline'
-import { exec } from 'child_process'
+import { exec, execSync, spawn } from 'child_process'
 import { TreeState } from '../lib/tree-state.mjs'
 import { FileWatcher, createDebouncedHandler } from '../lib/file-watcher.mjs'
-import { generateLayout } from '../lib/layout.mjs'
+import { generateLayout, LAYOUT_CONFIG } from '../lib/layout.mjs'
 import { createRenderer } from '../lib/renderer.mjs'
-import { setupTerminal, onResize, getTerminalSize } from '../lib/terminal.mjs'
+import { setupTerminal, onResize, getTerminalSize, enableMouse, disableMouse } from '../lib/terminal.mjs'
 import { GitStatus } from '../lib/git-status.mjs'
+import { loadConfig } from '../lib/config.mjs'
 
 // Interactive state
 let cursorIndex = 0
@@ -18,62 +19,76 @@ let filterPattern = ''
 let visibleLines = []
 let dirty = true  // Dirty flag for change-driven rendering
 
+// Markdown preview state
+let mdPreviewCmd = null  // e.g. 'markserv' — set by --markdown-preview
+let mdPreviewProcess = null
+
+// Mouse state - flag to suppress keypress events during mouse sequences
+let mouseActive = false
+
+// Built-in defaults (used when neither config nor CLI specifies a value)
+const DEFAULTS = {
+	path: '.',
+	history: 4,
+	ignore: [
+		'**/node_modules/**',
+		'**/.git/**',
+		'**/localdata/**',        // Database data directories
+		'**/.postgres/**',        // PostgreSQL data
+		'**/.mysql/**',           // MySQL data
+		'**/.cache/**',           // Cache directories
+	],
+	interval: 100,
+	ghostSteps: 3,
+	git: true,
+	breathe: 2000,
+	quick: false,
+	skipLoopCheck: true,
+	mdPreview: null,
+}
+
 /**
- * Parse command line arguments
- * @returns {object} Parsed options
+ * Parse command line arguments into a sparse object of only explicitly-set flags.
+ * @returns {object} Only the options the user actually typed on the CLI
  */
 function parseArgs() {
 	const args = process.argv.slice(2)
-	const options = {
-		path: '.',
-		history: 4,
-		ignore: [
-			'**/node_modules/**',
-			'**/.git/**',
-			'**/localdata/**',        // Database data directories
-			'**/.postgres/**',        // PostgreSQL data
-			'**/.mysql/**',           // MySQL data
-			'**/.cache/**',           // Cache directories
-		],
-		interval: 100,
-		ghostSteps: 3,
-		git: true,
-		breathe: 2000,
-		quick: false,
-		skipLoopCheck: true,
-	}
-	
+	const cli = {}
+
 	let i = 0
 	while (i < args.length) {
 		const arg = args[i]
-		
+
 		if (arg === '--history' || arg === '-n') {
-			options.history = parseInt(args[++i], 10) || 4
+			cli.history = parseInt(args[++i], 10) || 4
 		} else if (arg === '--ignore' || arg === '-i') {
-			options.ignore.push(args[++i])
+			cli.ignore = cli.ignore || []
+			cli.ignore.push(args[++i])
 		} else if (arg === '--interval') {
-			options.interval = parseInt(args[++i], 10) || 100
+			cli.interval = parseInt(args[++i], 10) || 100
 		} else if (arg === '--ghost-steps') {
-			options.ghostSteps = parseInt(args[++i], 10) || 3
+			cli.ghostSteps = parseInt(args[++i], 10) || 3
 		} else if (arg === '--no-git') {
-			options.git = false
+			cli.git = false
 		} else if (arg === '--breathe' || arg === '-b') {
-			options.breathe = parseInt(args[++i], 10) || 2000
+			cli.breathe = parseInt(args[++i], 10) || 2000
 		} else if (arg === '--quick' || arg === '-q') {
-			options.quick = true
+			cli.quick = true
+		} else if (arg === '--markdown-preview') {
+			cli.mdPreview = args[++i]
 		} else if (arg === '--loopcheck') {
-			options.skipLoopCheck = false
+			cli.skipLoopCheck = false
 		} else if (arg === '--help' || arg === '-h') {
 			printHelp()
 			process.exit(0)
 		} else if (!arg.startsWith('-')) {
-			options.path = arg
+			cli.path = arg
 		}
-		
+
 		i++
 	}
-	
-	return options
+
+	return cli
 }
 
 /**
@@ -94,6 +109,7 @@ Options:
   --ghost-steps <num>    Fade steps for deleted items (default: 3)
   --no-git               Disable git status indicators
   --quick, -q            Render once and exit (no watching)
+  --markdown-preview <cmd>  Preview .md files with <cmd> (e.g. markserv)
   --loopcheck            Enable symlink loop detection (slower startup, safer)
   --help, -h             Show this help message
 
@@ -106,6 +122,12 @@ Git Status Symbols:
   ↑  Ahead (cyan)
   ↓  Behind (red)
 
+Config Files:
+  ~/.config/fstop/config.json   Global defaults
+  .fstop.json                   Per-project overrides (in project root)
+  CLI flags override config. Config keys: markdownPreview, history,
+  ignore, interval, breathe, ghostSteps, git, loopcheck.
+
 Examples:
   node bin/watch.mjs .
   node bin/watch.mjs ./src --history 6
@@ -117,9 +139,37 @@ Examples:
  * Main application
  */
 async function main() {
-	const options = parseArgs()
-	const watchPath = resolve(options.path)
-	
+	const cli = parseArgs()
+	const watchPath = resolve(cli.path || DEFAULTS.path)
+
+	// Load config files and merge: defaults < global config < project config < CLI
+	const config = loadConfig(watchPath)
+
+	// Config uses "markdownPreview" key, map to internal "mdPreview"
+	if (config.markdownPreview !== undefined) {
+		config.mdPreview = config.markdownPreview
+		delete config.markdownPreview
+	}
+	// Config uses "loopcheck" (boolean), map to internal "skipLoopCheck" (inverted)
+	if (config.loopcheck !== undefined) {
+		config.skipLoopCheck = !config.loopcheck
+		delete config.loopcheck
+	}
+
+	// Merge: ignore is additive across all layers
+	const cliIgnore = cli.ignore || []
+	const configIgnore = config.ignore || []
+	delete cli.ignore
+	delete config.ignore
+
+	const options = { ...DEFAULTS, ...config, ...cli }
+	options.ignore = [...DEFAULTS.ignore, ...configIgnore, ...cliIgnore]
+
+	// Store markdown preview command if provided
+	if (options.mdPreview) {
+		mdPreviewCmd = options.mdPreview
+	}
+
 	// Initialize tree state
 	const treeState = new TreeState(watchPath, {
 		historyLimit: options.history,
@@ -148,7 +198,41 @@ async function main() {
 	let handleExit = () => {}
 	if (!options.quick) {
 		cleanup = setupTerminal()
-		
+
+		// Enable mouse tracking for --markdown-preview mode
+		if (mdPreviewCmd) {
+			enableMouse()
+			const baseCleanup = cleanup
+			cleanup = () => { disableMouse(); baseCleanup() }
+
+			// Handle mouse clicks (SGR protocol) - register before readline
+			// so we can set mouseActive flag before keypress events fire
+			process.stdin.on('data', async (data) => {
+				const str = data.toString()
+				const match = str.match(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/)
+				if (match) {
+					// Suppress readline keypress events for this mouse sequence
+					mouseActive = true
+					setTimeout(() => { mouseActive = false }, 0)
+
+					const button = parseInt(match[1])
+					const row = parseInt(match[3])
+					const isPress = match[4] === 'M'
+
+					// Left click press only
+					if (button === 0 && isPress) {
+						const lineIndex = row - LAYOUT_CONFIG.headerRows - 1
+						if (lineIndex >= 0 && lineIndex < visibleLines.length) {
+							cursorIndex = lineIndex
+							openSelected()
+							dirty = true
+							await doRender()
+						}
+					}
+				}
+			})
+		}
+
 		// Enable raw mode for keypresses
 		readline.emitKeypressEvents(process.stdin)
 		if (process.stdin.isTTY) {
@@ -162,14 +246,46 @@ async function main() {
 	function openSelected() {
 		const line = visibleLines[cursorIndex]
 		if (!line) return
-		
+
 		const path = line.node?.path
 		if (!path) return
-		
+
+		// Markdown files: use preview command if configured
+		if (mdPreviewCmd && extname(path).toLowerCase() === '.md') {
+			openMdPreview(path)
+			return
+		}
+
 		// macOS: open, Linux: xdg-open
 		const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
 		exec(`${cmd} "${path}"`, (err) => {
 			// Silently ignore errors
+		})
+	}
+
+	/**
+	 * Open a markdown file with the configured preview command
+	 */
+	function openMdPreview(filePath) {
+		// Kill previous preview process if running
+		if (mdPreviewProcess) {
+			mdPreviewProcess.kill()
+			mdPreviewProcess = null
+		}
+
+		const relPath = relative(watchPath, filePath)
+		mdPreviewProcess = spawn(mdPreviewCmd, [relPath], {
+			cwd: watchPath,
+			stdio: 'ignore',
+			detached: false,
+		})
+
+		mdPreviewProcess.on('error', () => {
+			mdPreviewProcess = null
+		})
+
+		mdPreviewProcess.on('exit', () => {
+			mdPreviewProcess = null
 		})
 	}
 	
@@ -186,7 +302,10 @@ async function main() {
 	if (!options.quick) {
 		process.stdin.on('keypress', async (str, key) => {
 		if (!key) return
-		
+
+		// Ignore characters from mouse sequences (handled by data listener)
+		if (mouseActive) return
+
 		// Ctrl+C to exit
 		if (key.name === 'c' && key.ctrl) {
 			handleExit()
@@ -300,6 +419,7 @@ async function main() {
 		cursorIndex,
 		filterPattern,
 		quick: options.quick,
+		mdPreview: !!mdPreviewCmd,
 	})
 	
 	// Clear dirty flag after successful render
@@ -364,6 +484,10 @@ async function main() {
 			clearInterval(ghostTimer)
 			clearInterval(breatheTimer)
 			watcher.stop()
+			if (mdPreviewProcess) {
+				mdPreviewProcess.kill()
+				mdPreviewProcess = null
+			}
 			cleanup()
 			process.exit(0)
 		}
