@@ -145,6 +145,7 @@ async function main() {
 	
 	// Setup terminal (hide cursor, handle cleanup) - skip in quick mode
 	let cleanup = () => {}
+	let handleExit = () => {}
 	if (!options.quick) {
 		cleanup = setupTerminal()
 		
@@ -359,11 +360,12 @@ async function main() {
 		}, options.breathe)
 		
 		// Cleanup on exit
-		const handleExit = () => {
+		handleExit = () => {
 			clearInterval(ghostTimer)
 			clearInterval(breatheTimer)
 			watcher.stop()
 			cleanup()
+			process.exit(0)
 		}
 		
 		process.on('SIGINT', handleExit)
