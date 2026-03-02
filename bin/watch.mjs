@@ -209,26 +209,44 @@ async function main() {
 			// so we can set mouseActive flag before keypress events fire
 			process.stdin.on('data', async (data) => {
 				const str = data.toString()
+				// Suppress ALL SGR mouse data (press, release, scroll, partial sequences)
+				// to prevent escape bytes leaking into readline as arrow characters
+				if (!str.includes('\x1b[<')) return
+				mouseActive = true
+				setTimeout(() => { mouseActive = false }, 0)
+
 				const match = str.match(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/)
-				if (match) {
-					// Suppress readline keypress events for this mouse sequence
-					mouseActive = true
-					setTimeout(() => { mouseActive = false }, 0)
+				if (!match) return
 
-					const button = parseInt(match[1])
-					const row = parseInt(match[3])
-					const isPress = match[4] === 'M'
+				const button = parseInt(match[1])
+				const col = parseInt(match[2])
+				const row = parseInt(match[3])
+				const isPress = match[4] === 'M'
 
-					// Left click press only
-					if (button === 0 && isPress) {
-						const lineIndex = row - LAYOUT_CONFIG.headerRows - 1
-						if (lineIndex >= 0 && lineIndex < visibleLines.length) {
-							cursorIndex = lineIndex
-							openSelected()
-							dirty = true
-							await doRender()
-						}
-					}
+				// Left click press only
+				if (button !== 0 || !isPress) return
+
+				const lineIndex = row - LAYOUT_CONFIG.headerRows - 1
+				if (lineIndex < 0 || lineIndex >= visibleLines.length) return
+
+				const line = visibleLines[lineIndex]
+				const node = line?.node
+				if (!node) return
+
+				// Calculate where the clickable filename ends
+				const prefixLen = node.depth > 0 ? ((node.parentContinues?.length || 0) * 4 + 4) : 0
+				const nodeGit = gitStatus ? GitStatus.getStatusForPath(node.path, node.realPath, node.type) : null
+				const gitLen = nodeGit ? 2 : 0
+				let nameLen = node.name.length
+				if (node.type === 'directory') nameLen += 1
+				const clickableEnd = prefixLen + gitLen + nameLen
+
+				// Only open if click is on the filename, not trailing empty space
+				if (col <= clickableEnd) {
+					cursorIndex = lineIndex
+					openSelected()
+					dirty = true
+					await doRender()
 				}
 			})
 		}
