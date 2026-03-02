@@ -90,6 +90,35 @@ node bin/watch.mjs . --breathe 500
 | `--ignore` | `-i` | | Add glob patterns to ignore |
 | `--ghost-steps` | | `3` | Fade steps for deleted items |
 | `--no-git` | | | Disable git status indicators |
+| `--quick` | `-q` | | Render once and exit (no watching) |
+| `--markdown-preview` | | | Preview `.md` files with a command (e.g. `markserv`) |
+| `--loopcheck` | | | Enable symlink loop detection (slower startup, safer) |
+
+## 📝 Config Files
+
+fstop loads defaults from config files so you don't have to repeat CLI flags:
+
+| File | Scope |
+|------|-------|
+| `~/.config/fstop/config.json` | Global defaults |
+| `.fstop.json` | Per-project overrides (in project root) |
+
+CLI flags override config. Config keys use camelCase versions of flag names: `history`, `ignore`, `interval`, `breathe`, `ghostSteps`, `git`, `loopcheck`, `markdownPreview`.
+
+### Markdown Preview Config
+
+The `markdownPreview` key accepts either a plain command string or a structured object with extra flags. Works great with [markserv](https://github.com/F1LT3R/markserv):
+
+```json
+{
+  "markdownPreview": {
+    "command": "markserv",
+    "flags": ["--theme", "solarized"]
+  }
+}
+```
+
+The `flags` array is passed to the command before fstop's own arguments.
 
 ## ⌨️ Keyboard Controls
 
@@ -100,13 +129,14 @@ fstop is fully interactive:
 | `↑` / `k` | Move cursor up |
 | `↓` / `j` | Move cursor down |
 | `Enter` | Open selected file/directory |
-| `/` | Enter filter mode (vim-style) |
-| `Esc` | Exit filter mode |
+| Any character | Start/continue filtering |
+| `Backspace` | Remove last filter character |
+| `Esc` | Clear filter |
 | `Ctrl+C` | Quit |
 
 ### Filter Mode
 
-Press `/` to search. Type a pattern to filter and highlight matching files:
+Just start typing to filter and highlight matching files:
 
 ```
 ├── ✚ [lay]out.mjs        <- "lay" highlighted
@@ -119,8 +149,9 @@ Press `/` to search. Type a pattern to filter and highlight matching files:
 - Matching files get a weight boost (bubble to top)
 - Matched substring shown with yellow background
 - Cursor navigation works during filter
-- `Enter` opens selected + exits filter
-- `Esc` exits without opening
+- `Enter` opens selected
+- `Backspace` removes last filter character
+- `Esc` clears filter
 
 ## 🎯 Git Status Symbols
 
@@ -129,7 +160,7 @@ Press `/` to search. Type a pattern to filter and highlight matching files:
 | `✖` | 🔴 Red | Merge conflicts |
 | `✚` | 🟡 Yellow | Unstaged changes |
 | `●` | 🟢 Green | Staged for commit |
-| `…` | 🟢 Green | Untracked (new to project) |
+| `…` | ⚪ Gray | Untracked (new to project) |
 | `⇅` | 🟣 Magenta | Ahead and behind remote |
 | `↑` | 🔵 Cyan | Ahead of remote |
 | `↓` | 🔴 Red | Behind remote |
@@ -165,7 +196,8 @@ fstop/
 │   ├── layout.mjs         # Space-aware tree layout
 │   ├── renderer.mjs       # ANSI terminal rendering
 │   ├── terminal.mjs       # Terminal utilities
-│   └── tree-state.mjs     # File tree state management
+│   ├── tree-state.mjs     # File tree state management
+│   └── config.mjs         # Config file loading
 └── package.json
 ```
 
@@ -220,7 +252,6 @@ WEIGHT.git.unstaged = 300
 By default, fstop ignores:
 - `**/node_modules/**`
 - `**/.git/**`
-- `**/tmp/**`
 - `**/localdata/**`, `**/.postgres/**`, `**/.mysql/**` (database data)
 - `**/.cache/**`
 

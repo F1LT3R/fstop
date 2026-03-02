@@ -22,6 +22,7 @@ let dirty = true  // Dirty flag for change-driven rendering
 
 // Markdown preview state
 let mdPreviewCmd = null  // e.g. 'markserv' — set by --markdown-preview
+let mdPreviewFlags = []  // extra flags from structured config
 let mdPreviewProcess = null
 let mdPreviewPort = null
 
@@ -112,6 +113,7 @@ Options:
   --no-git               Disable git status indicators
   --quick, -q            Render once and exit (no watching)
   --markdown-preview <cmd>  Preview .md files with <cmd> (e.g. markserv)
+                             Config: { "command": "<cmd>", "flags": [...] }
   --loopcheck            Enable symlink loop detection (slower startup, safer)
   --help, -h             Show this help message
 
@@ -169,7 +171,12 @@ async function main() {
 
 	// Store markdown preview command if provided
 	if (options.mdPreview) {
-		mdPreviewCmd = options.mdPreview
+		if (typeof options.mdPreview === 'object') {
+			mdPreviewCmd = options.mdPreview.command
+			mdPreviewFlags = options.mdPreview.flags || []
+		} else {
+			mdPreviewCmd = options.mdPreview
+		}
 	}
 
 	// Initialize tree state
@@ -306,7 +313,7 @@ async function main() {
 		// First call: spawn markserv once for the whole project
 		if (!mdPreviewProcess) {
 			mdPreviewPort = await getFreePort()
-			mdPreviewProcess = spawn(mdPreviewCmd, [watchPath, '--port', String(mdPreviewPort), '--browser', 'false'], {
+			mdPreviewProcess = spawn(mdPreviewCmd, [...mdPreviewFlags, watchPath, '--port', String(mdPreviewPort), '--browser', 'false'], {
 				cwd: watchPath,
 				stdio: 'ignore',
 				detached: false,
