@@ -4,7 +4,8 @@
 	"description": "Live filesystem monitor with heat decay and adaptive tree display",
 	"type": "module",
 	"bin": {
-		"fstop": "./bin/watch.mjs"
+		"fstop": "./bin/watch.mjs",
+		"fs": "./bin/watch.mjs"
 	},
 	"scripts": {
 		"start": "node bin/watch.mjs",
