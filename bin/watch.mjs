@@ -3,6 +3,7 @@
 // CLI entry point - wires together watcher, state, layout, and renderer
 
 import { resolve, dirname, extname, relative } from 'path'
+import { createServer } from 'net'
 import readline from 'readline'
 import { exec, execSync, spawn } from 'child_process'
 import { TreeState } from '../lib/tree-state.mjs'
@@ -22,6 +23,7 @@ let dirty = true  // Dirty flag for change-driven rendering
 // Markdown preview state
 let mdPreviewCmd = null  // e.g. 'markserv' — set by --markdown-preview
 let mdPreviewProcess = null
+let mdPreviewPort = null
 
 // Mouse state - flag to suppress keypress events during mouse sequences
 let mouseActive = false
@@ -282,29 +284,42 @@ async function main() {
 	}
 
 	/**
-	 * Open a markdown file with the configured preview command
+	 * Get a free port by binding to port 0 and reading the assigned port.
 	 */
-	function openMdPreview(filePath) {
-		// Kill previous preview process if running
-		if (mdPreviewProcess) {
-			mdPreviewProcess.kill()
-			mdPreviewProcess = null
+	function getFreePort() {
+		return new Promise((resolve, reject) => {
+			const srv = createServer()
+			srv.listen(0, () => {
+				const port = srv.address().port
+				srv.close(() => resolve(port))
+			})
+			srv.on('error', reject)
+		})
+	}
+
+	/**
+	 * Open a markdown file with the configured preview command.
+	 * Spawns a single markserv instance for the project on first call,
+	 * then opens specific file URLs in the browser.
+	 */
+	async function openMdPreview(filePath) {
+		// First call: spawn markserv once for the whole project
+		if (!mdPreviewProcess) {
+			mdPreviewPort = await getFreePort()
+			mdPreviewProcess = spawn(mdPreviewCmd, [watchPath, '--port', String(mdPreviewPort), '--browser', 'false'], {
+				cwd: watchPath,
+				stdio: 'ignore',
+				detached: false,
+			})
+			mdPreviewProcess.on('error', () => { mdPreviewProcess = null; mdPreviewPort = null })
+			mdPreviewProcess.on('exit', () => { mdPreviewProcess = null; mdPreviewPort = null })
 		}
 
+		// Open the specific file URL in the browser
 		const relPath = relative(watchPath, filePath)
-		mdPreviewProcess = spawn(mdPreviewCmd, [relPath], {
-			cwd: watchPath,
-			stdio: 'ignore',
-			detached: false,
-		})
-
-		mdPreviewProcess.on('error', () => {
-			mdPreviewProcess = null
-		})
-
-		mdPreviewProcess.on('exit', () => {
-			mdPreviewProcess = null
-		})
+		const url = `http://localhost:${mdPreviewPort}/${relPath}`
+		const opener = process.platform === 'darwin' ? 'open' : 'xdg-open'
+		exec(`${opener} "${url}"`)
 	}
 	
 	/**
@@ -505,6 +520,7 @@ async function main() {
 			if (mdPreviewProcess) {
 				mdPreviewProcess.kill()
 				mdPreviewProcess = null
+				mdPreviewPort = null
 			}
 			cleanup()
 			process.exit(0)
