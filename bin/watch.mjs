@@ -581,7 +581,9 @@ async function main() {
 			node.eventTime = null
 		}
 		
-		// Initial render
+		// Initial render (force dirty in case a debounced watcher event
+		// already consumed it during async setup above)
+		dirty = true
 		await doRender()
 		
 		// Quick mode: exit after first render
