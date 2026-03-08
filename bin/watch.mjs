@@ -264,7 +264,7 @@ async function main() {
 			// Toggle indicator zone (directories only)
 			if (node.type === 'directory' && node.depth > 0) {
 				const toggleStart = clickableEnd + 1
-				const toggleEnd = toggleStart + 5
+				const toggleEnd = toggleStart + 1
 				if (col > clickableEnd && col <= toggleEnd) {
 					if (manualFolds.has(node.path)) {
 						manualFolds.delete(node.path)
