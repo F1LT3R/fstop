@@ -9,10 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Manual directory fold/unfold with Ctrl+Up (fold) and Ctrl+Down (unfold)
-- Clickable `[▶▶▶]`/`[▼▼▼]` toggle indicators on every directory line
-- Ctrl+click on directories to hide them entirely from the tree
+- Clickable `[▶]`/`[▼]` toggle indicators on every directory line (yellow folded, cyan open)
+- Shift+click on directories to hide them entirely from the tree
 - Escape clears manual folds, manual opens, and hidden dirs (in addition to filter)
 - `manualOpens` Set to override auto-collapse for user-opened directories
+- Mouse tracking enabled in all interactive modes (not just markdown preview)
 
 ### Fixed
 

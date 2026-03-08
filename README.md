@@ -34,6 +34,7 @@ watching: /Users/dev/myproject  ↑3
 - **👻 Smart Ghosts** — Tracked deleted files stay visible until committed; untracked fade naturally
 - **⋮ Partial Collapse** — Shows `⋮ +N more` when some directory contents are hidden
 - **🎚️ Additive Weights** — Granular, composable priority system for fine-tuned control
+- **📂 Directory Folding** — Ctrl+Up/Down or click `[▼]`/`[▶]` to fold/unfold directories; Shift+click to hide
 - **⌨️ Cursor Navigation** — Use arrow keys or j/k to navigate, Enter to open files
 - **🔍 Filter Mode** — Press `/` to search (vim-style), matches highlighted with yellow background
 - **🔗 Clickable Links** — Filenames are clickable in iTerm and compatible terminals (OSC 8)
@@ -129,10 +130,20 @@ fstop is fully interactive:
 | `↑` / `k` | Move cursor up |
 | `↓` / `j` | Move cursor down |
 | `Enter` | Open selected file/directory |
+| `Ctrl+↑` | Fold directory at cursor |
+| `Ctrl+↓` | Unfold directory at cursor |
 | Any character | Start/continue filtering |
 | `Backspace` | Remove last filter character |
-| `Esc` | Clear filter |
+| `Esc` | Clear filter, folds, and hidden dirs |
 | `Ctrl+C` | Quit |
+
+### Mouse Controls
+
+| Action | Effect |
+|--------|--------|
+| Click filename | Open file/directory |
+| Click `[▼]`/`[▶]` | Toggle fold on directory |
+| Shift+click directory | Hide directory from tree |
 
 ### Filter Mode
 
@@ -151,7 +162,7 @@ Just start typing to filter and highlight matching files:
 - Cursor navigation works during filter
 - `Enter` opens selected
 - `Backspace` removes last filter character
-- `Esc` clears filter
+- `Esc` clears filter, folds, and hidden dirs
 
 ## 🎯 Git Status Symbols
 
