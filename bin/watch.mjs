@@ -234,9 +234,10 @@ async function main() {
 			const row = parseInt(match[3])
 			const isPress = match[4] === 'M'
 
-			// Left click or Ctrl+left click press only
+			// Left click, Shift+left, or Ctrl+left press only
+			const isShift = button === 4
 			const isCtrl = button === 16
-			if ((button !== 0 && button !== 16) || !isPress) return
+			if ((button !== 0 && button !== 4 && button !== 16) || !isPress) return
 
 			const lineIndex = row - LAYOUT_CONFIG.headerRows - 1
 			if (lineIndex < 0 || lineIndex >= visibleLines.length) return
@@ -245,8 +246,8 @@ async function main() {
 			const node = line?.node
 			if (!node) return
 
-			// Ctrl+click on directory: hide it entirely
-			if (isCtrl && node.type === 'directory') {
+			// Shift+click or Ctrl+click on directory: hide it entirely
+			if ((isShift || isCtrl) && node.type === 'directory') {
 				hiddenDirs.add(node.path)
 				dirty = true
 				await doRender()
