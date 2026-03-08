@@ -211,84 +211,82 @@ async function main() {
 	if (!options.quick) {
 		cleanup = setupTerminal()
 
-		// Enable mouse tracking for --markdown-preview mode
-		if (mdPreviewCmd) {
-			enableMouse()
-			const baseCleanup = cleanup
-			cleanup = () => { disableMouse(); baseCleanup() }
+		// Enable mouse tracking (for clicks, toggles, Ctrl+click hide)
+		enableMouse()
+		const baseCleanup = cleanup
+		cleanup = () => { disableMouse(); baseCleanup() }
 
-			// Handle mouse clicks (SGR protocol) - register before readline
-			// so we can set mouseActive flag before keypress events fire
-			process.stdin.on('data', async (data) => {
-				const str = data.toString()
-				// Suppress ALL SGR mouse data (press, release, scroll, partial sequences)
-				// to prevent escape bytes leaking into readline as arrow characters
-				if (!str.includes('\x1b[<')) return
-				mouseActive = true
-				setTimeout(() => { mouseActive = false }, 0)
+		// Handle mouse clicks (SGR protocol) - register before readline
+		// so we can set mouseActive flag before keypress events fire
+		process.stdin.on('data', async (data) => {
+			const str = data.toString()
+			// Suppress ALL SGR mouse data (press, release, scroll, partial sequences)
+			// to prevent escape bytes leaking into readline as arrow characters
+			if (!str.includes('\x1b[<')) return
+			mouseActive = true
+			setTimeout(() => { mouseActive = false }, 0)
 
-				const match = str.match(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/)
-				if (!match) return
+			const match = str.match(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/)
+			if (!match) return
 
-				const button = parseInt(match[1])
-				const col = parseInt(match[2])
-				const row = parseInt(match[3])
-				const isPress = match[4] === 'M'
+			const button = parseInt(match[1])
+			const col = parseInt(match[2])
+			const row = parseInt(match[3])
+			const isPress = match[4] === 'M'
 
-				// Left click or Ctrl+left click press only
-				const isCtrl = button === 16
-				if ((button !== 0 && button !== 16) || !isPress) return
+			// Left click or Ctrl+left click press only
+			const isCtrl = button === 16
+			if ((button !== 0 && button !== 16) || !isPress) return
 
-				const lineIndex = row - LAYOUT_CONFIG.headerRows - 1
-				if (lineIndex < 0 || lineIndex >= visibleLines.length) return
+			const lineIndex = row - LAYOUT_CONFIG.headerRows - 1
+			if (lineIndex < 0 || lineIndex >= visibleLines.length) return
 
-				const line = visibleLines[lineIndex]
-				const node = line?.node
-				if (!node) return
+			const line = visibleLines[lineIndex]
+			const node = line?.node
+			if (!node) return
 
-				// Ctrl+click on directory: hide it entirely
-				if (isCtrl && node.type === 'directory') {
-					hiddenDirs.add(node.path)
+			// Ctrl+click on directory: hide it entirely
+			if (isCtrl && node.type === 'directory') {
+				hiddenDirs.add(node.path)
+				dirty = true
+				await doRender()
+				return
+			}
+
+			// Calculate where the clickable filename ends
+			const prefixLen = node.depth > 0 ? ((node.parentContinues?.length || 0) * 2 + 2) : 0
+			const nodeGit = gitStatus ? GitStatus.getStatusForPath(node.path, node.realPath, node.type) : null
+			const gitLen = nodeGit ? 2 : 0
+			let nameLen = node.name.length
+			if (node.type === 'directory') nameLen += 1
+			const clickableEnd = prefixLen + gitLen + nameLen
+
+			// Toggle indicator zone (directories only)
+			if (node.type === 'directory' && node.depth > 0) {
+				const toggleStart = clickableEnd + 1
+				const toggleEnd = toggleStart + 5
+				if (col > clickableEnd && col <= toggleEnd) {
+					if (manualFolds.has(node.path)) {
+						manualFolds.delete(node.path)
+						manualOpens.add(node.path)
+					} else {
+						manualFolds.add(node.path)
+						manualOpens.delete(node.path)
+					}
 					dirty = true
 					await doRender()
 					return
 				}
+			}
 
-				// Calculate where the clickable filename ends
-				const prefixLen = node.depth > 0 ? ((node.parentContinues?.length || 0) * 2 + 2) : 0
-				const nodeGit = gitStatus ? GitStatus.getStatusForPath(node.path, node.realPath, node.type) : null
-				const gitLen = nodeGit ? 2 : 0
-				let nameLen = node.name.length
-				if (node.type === 'directory') nameLen += 1
-				const clickableEnd = prefixLen + gitLen + nameLen
-
-				// Toggle indicator zone (directories only)
-				if (node.type === 'directory' && node.depth > 0) {
-					const toggleStart = clickableEnd + 1
-					const toggleEnd = toggleStart + 5
-					if (col > clickableEnd && col <= toggleEnd) {
-						if (manualFolds.has(node.path)) {
-							manualFolds.delete(node.path)
-							manualOpens.add(node.path)
-						} else {
-							manualFolds.add(node.path)
-							manualOpens.delete(node.path)
-						}
-						dirty = true
-						await doRender()
-						return
-					}
-				}
-
-				// Only open if click is on the filename, not trailing empty space
-				if (col <= clickableEnd) {
-					cursorIndex = lineIndex
-					openSelected()
-					dirty = true
-					await doRender()
-				}
-			})
-		}
+			// Only open if click is on the filename, not trailing empty space
+			if (col <= clickableEnd) {
+				cursorIndex = lineIndex
+				openSelected()
+				dirty = true
+				await doRender()
+			}
+		})
 
 		// Enable raw mode for keypresses
 		readline.emitKeypressEvents(process.stdin)
