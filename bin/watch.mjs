@@ -43,6 +43,20 @@ const DEFAULTS = {
 		'**/.postgres/**',        // PostgreSQL data
 		'**/.mysql/**',           // MySQL data
 		'**/.cache/**',           // Cache directories
+		'**/target/**',           // Rust/Java build output
+		'**/dist/**',             // JS/TS build output
+		'**/build/**',            // Generic build output
+		'**/.next/**',            // Next.js
+		'**/.nuxt/**',            // Nuxt
+		'**/.output/**',          // Nitro/Nuxt output
+		'**/.venv/**',            // Python virtualenv
+		'**/__pycache__/**',      // Python bytecode
+		'**/.tox/**',             // Python tox
+		'**/coverage/**',         // Test coverage
+		'**/.nyc_output/**',      // NYC coverage
+		'**/.terraform/**',       // Terraform state
+		'**/.pulumi/**',          // Pulumi state
+		'**/.DS_Store',           // macOS metadata
 	],
 	interval: 100,
 	ghostSteps: 3,
