@@ -19,6 +19,9 @@ let cursorIndex = 0
 let filterPattern = ''
 let visibleLines = []
 let dirty = true  // Dirty flag for change-driven rendering
+const manualFolds = new Set()   // paths of manually folded dirs
+const manualOpens = new Set()   // dirs forced open (overrides auto-collapse)
+const hiddenDirs = new Set()    // paths of completely hidden dirs
 
 // Markdown preview state
 let mdPreviewCmd = null  // e.g. 'markserv' — set by --markdown-preview
@@ -232,8 +235,9 @@ async function main() {
 				const row = parseInt(match[3])
 				const isPress = match[4] === 'M'
 
-				// Left click press only
-				if (button !== 0 || !isPress) return
+				// Left click or Ctrl+left click press only
+				const isCtrl = button === 16
+				if ((button !== 0 && button !== 16) || !isPress) return
 
 				const lineIndex = row - LAYOUT_CONFIG.headerRows - 1
 				if (lineIndex < 0 || lineIndex >= visibleLines.length) return
@@ -242,13 +246,39 @@ async function main() {
 				const node = line?.node
 				if (!node) return
 
+				// Ctrl+click on directory: hide it entirely
+				if (isCtrl && node.type === 'directory') {
+					hiddenDirs.add(node.path)
+					dirty = true
+					await doRender()
+					return
+				}
+
 				// Calculate where the clickable filename ends
-				const prefixLen = node.depth > 0 ? ((node.parentContinues?.length || 0) * 4 + 4) : 0
+				const prefixLen = node.depth > 0 ? ((node.parentContinues?.length || 0) * 2 + 2) : 0
 				const nodeGit = gitStatus ? GitStatus.getStatusForPath(node.path, node.realPath, node.type) : null
 				const gitLen = nodeGit ? 2 : 0
 				let nameLen = node.name.length
 				if (node.type === 'directory') nameLen += 1
 				const clickableEnd = prefixLen + gitLen + nameLen
+
+				// Toggle indicator zone (directories only)
+				if (node.type === 'directory' && node.depth > 0) {
+					const toggleStart = clickableEnd + 1
+					const toggleEnd = toggleStart + 5
+					if (col > clickableEnd && col <= toggleEnd) {
+						if (manualFolds.has(node.path)) {
+							manualFolds.delete(node.path)
+							manualOpens.add(node.path)
+						} else {
+							manualFolds.add(node.path)
+							manualOpens.delete(node.path)
+						}
+						dirty = true
+						await doRender()
+						return
+					}
+				}
 
 				// Only open if click is on the filename, not trailing empty space
 				if (col <= clickableEnd) {
@@ -352,6 +382,30 @@ async function main() {
 			return
 		}
 		
+		// Ctrl+Up: fold directory at cursor
+		if (key.name === 'up' && key.ctrl) {
+			const line = visibleLines[cursorIndex]
+			if (line?.node?.type === 'directory') {
+				manualFolds.add(line.node.path)
+				manualOpens.delete(line.node.path)
+			}
+			dirty = true
+			await doRender()
+			return
+		}
+
+		// Ctrl+Down: unfold directory at cursor
+		if (key.name === 'down' && key.ctrl) {
+			const line = visibleLines[cursorIndex]
+			if (line?.node?.type === 'directory') {
+				manualFolds.delete(line.node.path)
+				manualOpens.add(line.node.path)
+			}
+			dirty = true
+			await doRender()
+			return
+		}
+
 		// Cursor navigation (ALWAYS active, even during filter)
 		if (key.name === 'up') {
 			moveCursor(-1)
@@ -374,9 +428,12 @@ async function main() {
 		return
 	}
 	
-	// Escape to clear filter
+	// Escape to clear filter + folds + hides
 	if (key.name === 'escape') {
 		filterPattern = ''
+		manualFolds.clear()
+		manualOpens.clear()
+		hiddenDirs.clear()
 		cursorIndex = 0
 		dirty = true
 		await doRender()
@@ -437,6 +494,9 @@ async function main() {
 			terminalSize: getTerminalSize(),
 			gitStatus,
 			filterPattern,
+			manualFolds,
+			manualOpens,
+			hiddenDirs,
 		})
 		
 		// Store visible lines for cursor navigation
