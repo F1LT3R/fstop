@@ -441,12 +441,13 @@ async function main() {
 		return
 	}
 	
-	// Escape to clear filter + folds + hides
+	// Escape to clear filter + folds + hides + ghosts
 	if (key.name === 'escape') {
 		filterPattern = ''
 		manualFolds.clear()
 		manualOpens.clear()
 		hiddenDirs.clear()
+		treeState.clearGhosts()
 		cursorIndex = 0
 		dirty = true
 		await doRender()
