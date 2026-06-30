@@ -243,3 +243,7 @@ No changes needed to: `tree-state.mjs`, `file-watcher.mjs`, `heat.mjs`,
 4. Edit `.gitignore` to remove a pattern → verify files return to normal
 5. Test in non-git directory → verify no change in behavior
 6. Test with symlinked directories pointing to other repos
+
+---
+
+![fstop word cloud](../wordcloud.png)

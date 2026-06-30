@@ -1,0 +1,50 @@
+{
+  "provider": "openrouter",
+  "base_url": "http://127.0.0.1:8801/api/v1",
+  "model": "google/gemini-2.5-flash",
+  "system": "You are a helpful assistant.",
+  "temperature": 0.7,
+  "max_tokens": 16384,
+  "stream_default": true,
+  "save_path_default": "ai.out.txt",
+  "env_key": "OPENROUTER_API_KEY",
+  "conversation": [
+    {
+      "role": "user",
+      "content": "hello",
+      "timestamp": "2026-03-06T06:30:12.968Z"
+    },
+    {
+      "role": "assistant",
+      "content": "Hello there! How can I help you today?",
+      "timestamp": "2026-03-06T06:30:12.970Z",
+      "usage": {
+        "prompt_tokens": 7,
+        "completion_tokens": 10,
+        "cost": 0.0000271,
+        "model": "google/gemini-2.5-flash"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Just checking in",
+      "timestamp": "2026-03-06T06:30:42.754Z"
+    },
+    {
+      "role": "assistant",
+      "content": "That's great! It's always good to check in. How are you doing? Is there anything on your mind, or anything you'd like to chat about?",
+      "timestamp": "2026-03-06T06:30:42.754Z",
+      "usage": {
+        "prompt_tokens": 20,
+        "completion_tokens": 36,
+        "cost": 0.000096,
+        "model": "google/gemini-2.5-flash"
+      }
+    }
+  ],
+  "meta": {
+    "last_updated": "2026-03-06T06:30:42.754Z",
+    "total_turns": 3,
+    "notes": "This file is updated by the CLI after each run. Do not check secrets into VCS."
+  }
+}

@@ -195,3 +195,7 @@ decisions.
 5. Verify gitignored files still sink below everything
 6. Test in a small project where everything fits — all files should still show
 7. Test in a large project — cold files should drop, leaving directory skeleton
+
+---
+
+![fstop word cloud](../wordcloud.png)

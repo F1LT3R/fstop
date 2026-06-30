@@ -1,0 +1,2 @@
+Does this tool account for resizing the screen horizontally to clip what can't be rendered, correctly? Sometimes it appears as if
+  the status was modified and the heat burned down overlapped the page after there's been a resize.
