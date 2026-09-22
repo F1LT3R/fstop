@@ -84,6 +84,9 @@ function parseArgs() {
 		} else if (arg === '--ignore' || arg === '-i') {
 			cli.ignore = cli.ignore || []
 			cli.ignore.push(args[++i])
+		} else if (arg === '--unignore' || arg === '-u') {
+			cli.unignore = cli.unignore || []
+			cli.unignore.push(args[++i])
 		} else if (arg === '--interval') {
 			cli.interval = parseInt(args[++i], 10) || 100
 		} else if (arg === '--ghost-steps') {
@@ -124,6 +127,7 @@ Usage:
 Options:
   --history, -n <num>    Rolling history size (default: 4)
   --ignore, -i <glob>    Add glob pattern to ignore (can use multiple times)
+  --unignore, -u <glob>  Add glob pattern to un-ignore (exception, multiple allowed)
   --interval <ms>        Debounce interval in ms (default: 100)
   --breathe, -b <ms>     Auto-refresh interval for heat decay (default: 2000)
   --ghost-steps <num>    Fade steps for deleted items (default: 3)
@@ -147,7 +151,7 @@ Config Files:
   ~/.config/fstop/config.json   Global defaults
   .fstop.json                   Per-project overrides (in project root)
   CLI flags override config. Config keys: markdownPreview, history,
-  ignore, interval, breathe, ghostSteps, git, loopcheck.
+  ignore, unignore, interval, breathe, ghostSteps, git, loopcheck.
 
 Examples:
   node bin/watch.mjs .
@@ -185,6 +189,8 @@ async function main() {
 
 	const options = { ...DEFAULTS, ...config, ...cli }
 	options.ignore = [...DEFAULTS.ignore, ...configIgnore, ...cliIgnore]
+	// Merge: unignore is additive across all layers (config, then CLI)
+	options.unignore = [...(config.unignore || []), ...(cli.unignore || [])]
 
 	// Store markdown preview command if provided
 	if (options.mdPreview) {
@@ -205,6 +211,7 @@ async function main() {
 	// Initialize file watcher
 	const watcher = new FileWatcher(watchPath, {
 		ignored: options.ignore,
+		unignore: options.unignore,
 		skipLoopCheck: options.skipLoopCheck,
 	})
 	
