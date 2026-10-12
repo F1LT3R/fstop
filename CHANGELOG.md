@@ -8,7 +8,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `--unignore` / `unignore` config key: carve exceptions out of ignore patterns (e.g. watch `.git/info/exclude` while `**/.git/**` stays ignored)
 - Manual directory fold/unfold with Ctrl+Up (fold) and Ctrl+Down (unfold)
 - Clickable `[▶]`/`[▼]` toggle indicators on every directory line (yellow folded, cyan open)
 - Shift+click on directories to hide them entirely from the tree
