@@ -119,6 +119,8 @@ The `markdownPreview` key accepts either a plain command string or a structured 
 }
 ```
 
+Each `.md` click opens a fresh markserv instance for that file — its default port, or the next free one when the default is taken. The instance stays alive as long as the browser tab it opened stays open, and exits on its own when that tab is closed (markserv `--exit-on-tab-close`), so open documents keep their preview servers while closed tabs give their ports back.
+
 The `flags` array is passed to the command before fstop's own arguments.
 
 ## ⌨️ Keyboard Controls
