@@ -89,7 +89,6 @@ node bin/watch.mjs . --breathe 500
 | `--breathe` | `-b` | `2000` | Auto-refresh interval in ms |
 | `--interval` | | `100` | Debounce interval for file changes |
 | `--ignore` | `-i` | | Add glob patterns to ignore |
-| `--unignore` | `-u` | | Add glob patterns to un-ignore (exceptions to ignored paths) |
 | `--ghost-steps` | | `3` | Fade steps for deleted items |
 | `--no-git` | | | Disable git status indicators |
 | `--quick` | `-q` | | Render once and exit (no watching) |
@@ -105,7 +104,7 @@ fstop loads defaults from config files so you don't have to repeat CLI flags:
 | `~/.config/fstop/config.json` | Global defaults |
 | `.fstop.json` | Per-project overrides (in project root) |
 
-CLI flags override config. Config keys use camelCase versions of flag names: `history`, `ignore`, `unignore`, `interval`, `breathe`, `ghostSteps`, `git`, `loopcheck`, `markdownPreview`.
+CLI flags override config. Config keys use camelCase versions of flag names: `history`, `ignore`, `interval`, `breathe`, `ghostSteps`, `git`, `loopcheck`, `markdownPreview`.
 
 ### Markdown Preview Config
 
@@ -119,6 +118,8 @@ The `markdownPreview` key accepts either a plain command string or a structured 
   }
 }
 ```
+
+Each `.md` click opens a fresh markserv instance for that file — its default port, or the next free one when the default is taken. The instance stays alive as long as the browser tab it opened stays open, and exits on its own when that tab is closed (markserv `--exit-on-tab-close`), so open documents keep their preview servers while closed tabs give their ports back.
 
 The `flags` array is passed to the command before fstop's own arguments.
 
@@ -268,16 +269,6 @@ By default, fstop ignores:
 - `**/.cache/**`
 
 **Note:** `dist/` directories are **not** ignored by default. Use `--ignore "**/dist/**"` if you want to exclude them.
-
-### Un-ignore exceptions
-
-Ignored subtrees are pruned wholesale by the watcher, so a negated pattern on a leaf alone (`!**/.git/info/exclude`) can never apply — the parent directories are gone first. `--unignore` / `unignore` carve real exceptions out of ignored paths: any exception match un-ignores the path, even deep inside an otherwise-ignored tree. Example — keep the rest of `.git/` ignored while watching git's local exclude file:
-
-```bash
-fstop . --unignore "**/.git" --unignore "**/.git/info" --unignore "**/.git/info/exclude"
-```
-
-or in `.fstop.json`: `{ "unignore": ["**/.git", "**/.git/info", "**/.git/info/exclude"] }`
 
 Symlinked directories are followed, including those pointing outside the watched root. If a symlink loop is detected, fstop will fail with a clear error message before starting the watcher.
 

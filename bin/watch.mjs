@@ -3,7 +3,6 @@
 // CLI entry point - wires together watcher, state, layout, and renderer
 
 import { resolve, dirname, extname, relative } from 'path'
-import { createServer } from 'net'
 import readline from 'readline'
 import { exec, execSync, spawn } from 'child_process'
 import { TreeState } from '../lib/tree-state.mjs'
@@ -26,8 +25,6 @@ const hiddenDirs = new Set()    // paths of completely hidden dirs
 // Markdown preview state
 let mdPreviewCmd = null  // e.g. 'markserv' — set by --markdown-preview
 let mdPreviewFlags = []  // extra flags from structured config
-let mdPreviewProcess = null
-let mdPreviewPort = null
 
 // Mouse state - flag to suppress keypress events during mouse sequences
 let mouseActive = false
@@ -84,9 +81,6 @@ function parseArgs() {
 		} else if (arg === '--ignore' || arg === '-i') {
 			cli.ignore = cli.ignore || []
 			cli.ignore.push(args[++i])
-		} else if (arg === '--unignore' || arg === '-u') {
-			cli.unignore = cli.unignore || []
-			cli.unignore.push(args[++i])
 		} else if (arg === '--interval') {
 			cli.interval = parseInt(args[++i], 10) || 100
 		} else if (arg === '--ghost-steps') {
@@ -127,7 +121,6 @@ Usage:
 Options:
   --history, -n <num>    Rolling history size (default: 4)
   --ignore, -i <glob>    Add glob pattern to ignore (can use multiple times)
-  --unignore, -u <glob>  Add glob pattern to un-ignore (exception, multiple allowed)
   --interval <ms>        Debounce interval in ms (default: 100)
   --breathe, -b <ms>     Auto-refresh interval for heat decay (default: 2000)
   --ghost-steps <num>    Fade steps for deleted items (default: 3)
@@ -151,7 +144,7 @@ Config Files:
   ~/.config/fstop/config.json   Global defaults
   .fstop.json                   Per-project overrides (in project root)
   CLI flags override config. Config keys: markdownPreview, history,
-  ignore, unignore, interval, breathe, ghostSteps, git, loopcheck.
+  ignore, interval, breathe, ghostSteps, git, loopcheck.
 
 Examples:
   node bin/watch.mjs .
@@ -189,8 +182,6 @@ async function main() {
 
 	const options = { ...DEFAULTS, ...config, ...cli }
 	options.ignore = [...DEFAULTS.ignore, ...configIgnore, ...cliIgnore]
-	// Merge: unignore is additive across all layers (config, then CLI)
-	options.unignore = [...(config.unignore || []), ...(cli.unignore || [])]
 
 	// Store markdown preview command if provided
 	if (options.mdPreview) {
@@ -211,7 +202,6 @@ async function main() {
 	// Initialize file watcher
 	const watcher = new FileWatcher(watchPath, {
 		ignored: options.ignore,
-		unignore: options.unignore,
 		skipLoopCheck: options.skipLoopCheck,
 	})
 	
@@ -341,42 +331,24 @@ async function main() {
 	}
 
 	/**
-	 * Get a free port by binding to port 0 and reading the assigned port.
-	 */
-	function getFreePort() {
-		return new Promise((resolve, reject) => {
-			const srv = createServer()
-			srv.listen(0, () => {
-				const port = srv.address().port
-				srv.close(() => resolve(port))
-			})
-			srv.on('error', reject)
-		})
-	}
-
-	/**
 	 * Open a markdown file with the configured preview command.
-	 * Spawns a single markserv instance for the project on first call,
-	 * then opens specific file URLs in the browser.
+	 * Each click spawns a fresh markserv instance for that file: no
+	 * --port is passed, so markserv takes its default port (or the
+	 * next free one when it is taken) and opens the browser itself
+	 * once it is listening. The instance exits on its own when its
+	 * browser tab is closed (--exit-on-tab-close), so each open
+	 * document keeps its server for as long as its tab stays open and
+	 * previous previews are never killed. detached keeps the instance
+	 * alive past fstop's own exit.
 	 */
-	async function openMdPreview(filePath) {
-		// First call: spawn markserv once for the whole project
-		if (!mdPreviewProcess) {
-			mdPreviewPort = await getFreePort()
-			mdPreviewProcess = spawn(mdPreviewCmd, [...mdPreviewFlags, watchPath, '--port', String(mdPreviewPort), '--browser', 'false'], {
-				cwd: watchPath,
-				stdio: 'ignore',
-				detached: false,
-			})
-			mdPreviewProcess.on('error', () => { mdPreviewProcess = null; mdPreviewPort = null })
-			mdPreviewProcess.on('exit', () => { mdPreviewProcess = null; mdPreviewPort = null })
-		}
-
-		// Open the specific file URL in the browser
+	function openMdPreview(filePath) {
 		const relPath = relative(watchPath, filePath)
-		const url = `http://localhost:${mdPreviewPort}/${relPath}`
-		const opener = process.platform === 'darwin' ? 'open' : 'xdg-open'
-		exec(`${opener} "${url}"`)
+		const proc = spawn(mdPreviewCmd, [...mdPreviewFlags, relPath, '--exit-on-tab-close'], {
+			cwd: watchPath,
+			stdio: 'ignore',
+			detached: true,
+		})
+		proc.unref()
 	}
 	
 	/**
@@ -605,11 +577,6 @@ async function main() {
 			clearInterval(ghostTimer)
 			clearInterval(breatheTimer)
 			watcher.stop()
-			if (mdPreviewProcess) {
-				mdPreviewProcess.kill()
-				mdPreviewProcess = null
-				mdPreviewPort = null
-			}
 			cleanup()
 			process.exit(0)
 		}
